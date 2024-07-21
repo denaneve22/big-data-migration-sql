@@ -1,0 +1,13 @@
+# Python
+*.pyc
+__pycache__/
+
+# Environment variables
+.env
+
+# AWS credentials
+*.pem
+
+# Data files
+*.csv
+*.avro
