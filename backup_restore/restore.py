@@ -1,28 +1,38 @@
-import fastavro
-import pyodbc
-import boto3
 import os
+import sys
+import pyodbc
+import fastavro
+import pandas as pd
+from sqlalchemy import create_engine
 
-conn = pyodbc.connect(
-    'DRIVER={ODBC Driver 17 for SQL Server};'
-    'SERVER=' + os.environ['DB_SERVER'] + ';'
-    'DATABASE=' + os.environ['DB_NAME'] + ';'
-    'UID=' + os.environ['DB_USER'] + ';'
-    'PWD=' + os.environ['DB_PASSWORD']
-)
-cursor = conn.cursor()
-s3 = boto3.client('s3')
-bucket_name = 'nombre-del-bucket'
+# Añadir el path del directorio padre para que se pueda importar el módulo config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config.config import get_sql_connection, get_s3_client, S3_BUCKET_NAME
 
-def restaurar_tabla(file_name, table_name):
-    s3.download_file(bucket_name, file_name, file_name)
-    with open(file_name, 'rb') as fo:
-        reader = fastavro.reader(fo)
-        for record in reader:
-            cursor.execute(f"INSERT INTO {table_name} VALUES ({', '.join(['?' for _ in record])})", tuple(record.values()))
-    conn.commit()
+def restore_table(table_name, backup_file_path):
+    # Leer el archivo AVRO
+    with open(backup_file_path, 'rb') as f:
+        reader = fastavro.reader(f)
+        records = [record for record in reader]
+    
+    # Convertir los registros en un DataFrame de pandas
+    df = pd.DataFrame(records)
+    
+    # Conectar a la base de datos
+    conn_str = (
+        "mssql+pyodbc://denan:Mancoeve22:)@big-data-migration.c3se2wo28ad4.us-east-2.rds.amazonaws.com:1433/"
+        "big-data-migration?driver=ODBC+Driver+17+for+SQL+Server"
+    )
+    engine = create_engine(conn_str)
+    
+    # Insertar los datos en la tabla correspondiente
+    df.to_sql(table_name, engine, if_exists='replace', index=False)
 
-# Ejemplo de uso
-restaurar_tabla('employees.avro', 'employees')
-restaurar_tabla('departments.avro', 'departments')
-restaurar_tabla('jobs.avro', 'jobs')
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: python restore.py <table_name>")
+        sys.exit(1)
+
+    table_name = sys.argv[1]
+    backup_file_path = f'backups/{table_name}_backup.avro'
+    restore_table(table_name, backup_file_path)

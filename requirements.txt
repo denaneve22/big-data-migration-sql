@@ -1,0 +1,8 @@
+fastapi
+pandas
+sqlalchemy
+pyodbc
+boto3
+uvicorn
+fastavro
+flask
